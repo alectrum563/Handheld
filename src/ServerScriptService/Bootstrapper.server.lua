@@ -14,6 +14,7 @@ local TeamManager = require(Core.TeamManager)
 local RoundManager = require(Core.RoundManager)
 local InventoryManager = require(Core.InventoryManager)
 local EconomyManager = require(Core.EconomyManager)
+local HitDetection = require(Core.HitDetection)
 
 -- Get remote events
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -31,6 +32,9 @@ TeamManager.Initialize()
 
 -- Initialize round manager
 RoundManager.Initialize()
+
+-- Initialize hit detection
+HitDetection.Initialize()
 
 -- Handle get inventory request
 GetInventoryEvent.OnServerInvoke = function(player)
