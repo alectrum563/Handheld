@@ -1,0 +1,85 @@
+{
+  "name": "FPS Game",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+
+      "Modules": {
+        "$path": "src/ReplicatedStorage/Modules"
+      },
+
+      "Weapons": {
+        "$className": "Folder"
+      },
+
+      "Remotes": {
+        "$className": "Folder",
+
+        "RoundState": {
+          "$className": "RemoteEvent"
+        },
+
+        "WeaponFired": {
+          "$className": "RemoteEvent"
+        },
+
+        "DamagePlayer": {
+          "$className": "RemoteEvent"
+        },
+
+        "EquipWeapon": {
+          "$className": "RemoteEvent"
+        },
+
+        "SpawnPlayer": {
+          "$className": "RemoteEvent"
+        },
+
+        "GetInventory": {
+          "$className": "RemoteFunction"
+        },
+
+        "GetEconomy": {
+          "$className": "RemoteFunction"
+        }
+      }
+    },
+
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+
+      "Bootstrapper": {
+        "$path": "src/ServerScriptService/Bootstrapper.server.lua"
+      },
+
+      "Core": {
+        "$path": "src/ServerScriptService/Core"
+      }
+    },
+
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+
+      "StarterPlayerScripts": {
+        "$path": "src/StarterPlayer/StarterPlayerScripts"
+      }
+    },
+
+    "Workspace": {
+      "$className": "Workspace",
+      "$ignoreUnknownInstances": true
+    },
+
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "$ignoreUnknownInstances": true
+    },
+
+    "Teams": {
+      "$className": "Teams",
+      "$ignoreUnknownInstances": true
+    }
+  }
+}

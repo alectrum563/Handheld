@@ -1,14 +1,28 @@
-# A fast, small, safe, gradually typed embeddable scripting language derived from Lua
-#
-# https://github.com/luau-lang/luau
-# https://luau.org/
 
-# Code coverage
-coverage.out
+# Roblox Studio Files
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
 
-# Profiling
-profile.out
-profile.svg
+# Build Output
+build/
+dist/
 
-# Time trace
-trace.json
+# Rojo
+*.lock
+
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
