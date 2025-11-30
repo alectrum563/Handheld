@@ -10,6 +10,7 @@ local GameConfig = {}
 GameConfig.ROUND_TIME = 600 -- 10 minutes in seconds
 GameConfig.INTERMISSION_TIME = 15 -- seconds between rounds
 GameConfig.MIN_PLAYERS = 2 -- minimum players to start a round
+GameConfig.PRACTICE_MODE = false -- Set to true to bypass player requirement (for solo testing)
 
 -- Team Settings
 GameConfig.TEAM_1_NAME = "Red Team"

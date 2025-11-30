@@ -23,6 +23,8 @@ local GetInventoryEvent = Remotes:WaitForChild("GetInventory")
 local GetEconomyEvent = Remotes:WaitForChild("GetEconomy")
 local EquipWeaponEvent = Remotes:WaitForChild("EquipWeapon")
 local SpawnPlayerEvent = Remotes:WaitForChild("SpawnPlayer")
+local TogglePracticeModeEvent = Remotes:WaitForChild("TogglePracticeMode")
+local PracticeModeUpdateEvent = Remotes:WaitForChild("PracticeModeUpdate")
 
 print("==============================================")
 print("         FPS Game Server Starting...         ")
@@ -92,6 +94,19 @@ SpawnPlayerEvent.OnServerEvent:Connect(function(player)
 
 	-- Respawn the player
 	TeamManager.RespawnPlayer(player, true)
+end)
+
+-- Handle practice mode toggle
+TogglePracticeModeEvent.OnServerEvent:Connect(function(player)
+	print(string.format("[Server] %s toggling practice mode", player.Name))
+
+	-- Toggle practice mode
+	GameConfig.PRACTICE_MODE = not GameConfig.PRACTICE_MODE
+
+	-- Notify all clients
+	PracticeModeUpdateEvent:FireAllClients(GameConfig.PRACTICE_MODE)
+
+	print(string.format("[Server] Practice mode is now: %s", GameConfig.PRACTICE_MODE and "ON" or "OFF"))
 end)
 
 -- Handle player joining

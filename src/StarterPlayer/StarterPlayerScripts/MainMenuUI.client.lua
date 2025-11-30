@@ -90,7 +90,7 @@ function MainMenuUI.CreateUI()
 	inventoryButton.Size = UDim2.new(0, 300, 0, 60)
 	inventoryButton.Position = UDim2.new(0.5, -150, 0.5, 60)
 	inventoryButton.BackgroundColor3 = Color3.fromRGB(70, 130, 200)
-	inventoryButton.Text = "LOADOUT (TAB)"
+	inventoryButton.Text = "LOADOUT (G)"
 	inventoryButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 	inventoryButton.TextSize = 24
 	inventoryButton.Font = Enum.Font.GothamBold
@@ -99,6 +99,22 @@ function MainMenuUI.CreateUI()
 	local invCorner = Instance.new("UICorner")
 	invCorner.CornerRadius = UDim.new(0, 10)
 	invCorner.Parent = inventoryButton
+
+	-- Practice mode button
+	local practiceButton = Instance.new("TextButton")
+	practiceButton.Name = "PracticeButton"
+	practiceButton.Size = UDim2.new(0, 300, 0, 50)
+	practiceButton.Position = UDim2.new(0.5, -150, 0.5, 135)
+	practiceButton.BackgroundColor3 = Color3.fromRGB(150, 100, 200)
+	practiceButton.Text = "PRACTICE MODE: OFF"
+	practiceButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	practiceButton.TextSize = 20
+	practiceButton.Font = Enum.Font.GothamBold
+	practiceButton.Parent = background
+
+	local practiceCorner = Instance.new("UICorner")
+	practiceCorner.CornerRadius = UDim.new(0, 8)
+	practiceCorner.Parent = practiceButton
 
 	-- Instructions
 	local instructions = Instance.new("TextLabel")
@@ -123,6 +139,11 @@ function MainMenuUI.CreateUI()
 	-- Inventory button click
 	inventoryButton.MouseButton1Click:Connect(function()
 		MainMenuUI.OpenInventory()
+	end)
+
+	-- Practice button click
+	practiceButton.MouseButton1Click:Connect(function()
+		MainMenuUI.TogglePracticeMode()
 	end)
 
 	print("[MainMenuUI] UI created")
@@ -172,6 +193,10 @@ function MainMenuUI.SpawnPlayer()
 	-- Close main menu
 	MainMenuUI.Close()
 
+	-- Switch to first-person mode
+	local cameraController = require(script.Parent.CameraController)
+	cameraController.SetFirstPerson()
+
 	-- Reset death state
 	MainMenuUI.IsDead = false
 end
@@ -186,13 +211,17 @@ function MainMenuUI.Open()
 	mainMenu.Enabled = true
 	MainMenuUI.IsInMenu = true
 
+	-- Switch to third-person mode
+	local cameraController = require(script.Parent.CameraController)
+	cameraController.SetThirdPerson()
+
 	-- Hide game HUD
 	local gameHUD = playerGui:FindFirstChild("GameHUD")
 	if gameHUD then
 		gameHUD.Enabled = false
 	end
 
-	print("[MainMenuUI] Opened")
+	print("[MainMenuUI] Opened - Switched to third-person")
 end
 
 -- Close main menu
@@ -227,6 +256,41 @@ function MainMenuUI.OpenInventory()
 		print("[MainMenuUI] Opened inventory")
 	else
 		warn("[MainMenuUI] InventoryUI not found - make sure InventoryUI.lua is running")
+	end
+end
+
+-- Toggle practice mode
+function MainMenuUI.TogglePracticeMode()
+	-- Get current practice mode state
+	local currentState = GameConfig.PRACTICE_MODE
+
+	-- Request toggle from server
+	local TogglePracticeModeEvent = Remotes:FindFirstChild("TogglePracticeMode")
+	if TogglePracticeModeEvent then
+		TogglePracticeModeEvent:FireServer()
+		print(string.format("[MainMenuUI] Toggling practice mode: %s -> %s", tostring(currentState), tostring(not currentState)))
+	else
+		warn("[MainMenuUI] TogglePracticeMode remote not found")
+	end
+end
+
+-- Update practice button display
+function MainMenuUI.UpdatePracticeButton(isEnabled)
+	local mainMenu = playerGui:FindFirstChild("MainMenuUI")
+	if not mainMenu then return end
+
+	local background = mainMenu:FindFirstChild("Background")
+	if not background then return end
+
+	local practiceButton = background:FindFirstChild("PracticeButton")
+	if practiceButton then
+		if isEnabled then
+			practiceButton.Text = "PRACTICE MODE: ON"
+			practiceButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+		else
+			practiceButton.Text = "PRACTICE MODE: OFF"
+			practiceButton.BackgroundColor3 = Color3.fromRGB(150, 100, 200)
+		end
 	end
 end
 
@@ -285,6 +349,16 @@ function MainMenuUI.Initialize()
 		MainMenuUI.OnRoundStateChanged(roundData)
 	end)
 
+	-- Listen for practice mode updates
+	local PracticeModeUpdateEvent = Remotes:FindFirstChild("PracticeModeUpdate")
+	if PracticeModeUpdateEvent then
+		PracticeModeUpdateEvent.OnClientEvent:Connect(function(isEnabled)
+			GameConfig.PRACTICE_MODE = isEnabled
+			MainMenuUI.UpdatePracticeButton(isEnabled)
+			print(string.format("[MainMenuUI] Practice mode updated: %s", isEnabled and "ON" or "OFF"))
+		end)
+	end
+
 	-- Handle character spawns
 	player.CharacterAdded:Connect(function(character)
 		MainMenuUI.OnCharacterAdded(character)
@@ -296,17 +370,26 @@ function MainMenuUI.Initialize()
 	end
 
 	-- Bind M key to open menu (only after death)
+	-- Bind G key to open inventory (only in menu)
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if gameProcessed then return end
 
+		-- M key - open menu after death
 		if input.KeyCode == Enum.KeyCode.M then
 			if MainMenuUI.IsDead then
 				MainMenuUI.Open()
 			end
 		end
+
+		-- G key - open inventory (only in Main Menu)
+		if input.KeyCode == Enum.KeyCode.G then
+			if MainMenuUI.IsInMenu then
+				MainMenuUI.OpenInventory()
+			end
+		end
 	end)
 
-	print("[MainMenuUI] Initialized - Press M to return to menu after death")
+	print("[MainMenuUI] Initialized - Press M to return to menu | Press G to open loadout")
 end
 
 -- Start

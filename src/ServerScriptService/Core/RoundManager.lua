@@ -62,6 +62,17 @@ end
 
 -- Wait for minimum players
 function RoundManager.WaitForPlayers()
+	-- Skip waiting if in practice mode
+	if GameConfig.PRACTICE_MODE then
+		print("[RoundManager] Practice mode enabled - skipping player requirement")
+		RoundStateEvent:FireAllClients({
+			State = "Waiting",
+			Message = "Practice Mode - No player requirement"
+		})
+		task.wait(2) -- Brief wait to show the message
+		return
+	end
+
 	print("[RoundManager] Waiting for players...")
 
 	RoundStateEvent:FireAllClients({

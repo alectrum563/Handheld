@@ -25,6 +25,9 @@ local MOUSE_SENSITIVITY = 0.2
 local cameraRotationX = 0
 local cameraRotationY = 0
 
+-- Camera state
+CameraController.IsFirstPerson = false
+
 -- Initialize camera
 function CameraController.Initialize()
 	-- Wait for character
@@ -32,10 +35,8 @@ function CameraController.Initialize()
 	local humanoid = character:WaitForChild("Humanoid")
 	local rootPart = character:WaitForChild("HumanoidRootPart")
 
-	-- Lock to first-person
-	player.CameraMode = Enum.CameraMode.LockFirstPerson
-	player.CameraMaxZoomDistance = 0.5
-	player.CameraMinZoomDistance = 0.5
+	-- Start in third-person (for Main Menu)
+	CameraController.SetThirdPerson()
 
 	-- Set camera subject
 	camera.CameraSubject = humanoid
@@ -46,7 +47,25 @@ function CameraController.Initialize()
 	-- Setup camera control
 	CameraController.SetupCameraControl()
 
-	print("[CameraController] Initialized - First-person mode locked")
+	print("[CameraController] Initialized - Third-person mode (Main Menu)")
+end
+
+-- Switch to first-person mode
+function CameraController.SetFirstPerson()
+	player.CameraMode = Enum.CameraMode.LockFirstPerson
+	player.CameraMaxZoomDistance = 0.5
+	player.CameraMinZoomDistance = 0.5
+	CameraController.IsFirstPerson = true
+	print("[CameraController] Switched to first-person")
+end
+
+-- Switch to third-person mode
+function CameraController.SetThirdPerson()
+	player.CameraMode = Enum.CameraMode.Classic
+	player.CameraMaxZoomDistance = 15
+	player.CameraMinZoomDistance = 0.5
+	CameraController.IsFirstPerson = false
+	print("[CameraController] Switched to third-person")
 end
 
 -- Setup camera control
@@ -66,29 +85,32 @@ function CameraController.UpdateCamera(deltaTime)
 	local rootPart = character:FindFirstChild("HumanoidRootPart")
 	if not humanoid or not rootPart then return end
 
-	-- Smoothly adjust FOV based on movement speed
-	local targetFOV = DEFAULT_FOV
+	-- Only adjust FOV in first-person mode
+	if CameraController.IsFirstPerson then
+		-- Smoothly adjust FOV based on movement speed
+		local targetFOV = DEFAULT_FOV
 
-	-- Check if sprinting (walk speed > run speed threshold)
-	if humanoid.WalkSpeed >= 30 then
-		targetFOV = SPRINT_FOV
+		-- Check if sprinting (walk speed > run speed threshold)
+		if humanoid.WalkSpeed >= 30 then
+			targetFOV = SPRINT_FOV
+		end
+
+		-- Lerp FOV
+		local currentFOV = camera.FieldOfView
+		camera.FieldOfView = currentFOV + (targetFOV - currentFOV) * FOV_TRANSITION_SPEED * deltaTime
 	end
-
-	-- Lerp FOV
-	local currentFOV = camera.FieldOfView
-	camera.FieldOfView = currentFOV + (targetFOV - currentFOV) * FOV_TRANSITION_SPEED * deltaTime
 end
 
 -- Handle character respawn
 player.CharacterAdded:Connect(function(character)
 	local humanoid = character:WaitForChild("Humanoid")
 
-	-- Relock camera
-	player.CameraMode = Enum.CameraMode.LockFirstPerson
+	-- Reset to third-person (for Main Menu)
+	CameraController.SetThirdPerson()
 	camera.CameraSubject = humanoid
 	camera.FieldOfView = DEFAULT_FOV
 
-	print("[CameraController] Camera reset for new character")
+	print("[CameraController] Camera reset for new character - Third-person mode")
 end)
 
 -- Initialize on script load

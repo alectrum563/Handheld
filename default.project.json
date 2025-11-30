@@ -41,6 +41,14 @@
           "$className": "RemoteEvent"
         },
 
+        "TogglePracticeMode": {
+          "$className": "RemoteEvent"
+        },
+
+        "PracticeModeUpdate": {
+          "$className": "RemoteEvent"
+        },
+
         "GetInventory": {
           "$className": "RemoteFunction"
         },
