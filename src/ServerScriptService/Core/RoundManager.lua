@@ -93,8 +93,15 @@ end
 function RoundManager.StartRound()
 	print("[RoundManager] Starting round...")
 
-	-- TODO: Select game mode and map
-	-- For now, we'll use TeamDeathmatch on a default map
+	-- Start game mode
+	local GameModeController = require(script.Parent.GameModeController)
+
+	-- TODO: Select game mode based on voting or rotation
+	-- For now, always use TeamDeathmatch
+	local modeName = "TeamDeathmatch"
+	GameModeController.StartMode(modeName)
+
+	RoundManager.CurrentGameMode = modeName
 
 	-- Respawn all players
 	local TeamManager = require(script.Parent.TeamManager)
@@ -107,7 +114,7 @@ function RoundManager.StartRound()
 	RoundManager.TimeRemaining = GameConfig.ROUND_TIME
 	RoundManager.WinningTeam = nil
 
-	print("[RoundManager] Round started!")
+	print("[RoundManager] Round started with game mode:", modeName)
 end
 
 -- Play the round
@@ -145,14 +152,34 @@ end
 
 -- Check win conditions (delegates to game mode)
 function RoundManager.CheckWinConditions()
-	-- TODO: Ask current game mode if someone has won
-	-- For now, return nil (no winner)
+	local GameModeController = require(script.Parent.GameModeController)
+
+	-- Check if game mode is active and has a winner
+	if GameModeController.IsModeActive() then
+		local currentMode = GameModeController.GetCurrentMode()
+		if currentMode then
+			local winner = currentMode:CheckVictoryCondition()
+			if winner then
+				-- Convert winner string to team object
+				if winner == "Team1" then
+					return game.Teams:FindFirstChild(GameConfig.TEAM_1_NAME)
+				elseif winner == "Team2" then
+					return game.Teams:FindFirstChild(GameConfig.TEAM_2_NAME)
+				end
+			end
+		end
+	end
+
 	return nil
 end
 
 -- End the round
 function RoundManager.EndRound(winningTeam)
 	print("[RoundManager] Ending round...")
+
+	-- Stop game mode
+	local GameModeController = require(script.Parent.GameModeController)
+	GameModeController.StopCurrentMode()
 
 	-- Notify clients
 	RoundStateEvent:FireAllClients({

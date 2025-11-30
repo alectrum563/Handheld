@@ -37,6 +37,10 @@
           "$className": "RemoteEvent"
         },
 
+        "GameModeUpdate": {
+          "$className": "RemoteEvent"
+        },
+
         "GetInventory": {
           "$className": "RemoteFunction"
         },

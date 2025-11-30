@@ -174,6 +174,10 @@ end
 function HitDetection.HandleKill(killer, victim, shotData)
 	print(string.format("[HitDetection] %s killed %s", killer.Name, victim.Name))
 
+	-- Notify game mode about the kill
+	local GameModeController = require(script.Parent.GameModeController)
+	GameModeController.HandlePlayerKill(killer, victim)
+
 	-- Award kill credit to the killer
 	local EconomyManager = require(script.Parent.EconomyManager)
 

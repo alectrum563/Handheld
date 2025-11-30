@@ -15,6 +15,7 @@ local RoundManager = require(Core.RoundManager)
 local InventoryManager = require(Core.InventoryManager)
 local EconomyManager = require(Core.EconomyManager)
 local HitDetection = require(Core.HitDetection)
+local GameModeController = require(Core.GameModeController)
 
 -- Get remote events
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -29,6 +30,9 @@ print("==============================================")
 
 -- Initialize teams
 TeamManager.Initialize()
+
+-- Initialize game mode controller
+GameModeController.Initialize()
 
 -- Initialize round manager
 RoundManager.Initialize()
