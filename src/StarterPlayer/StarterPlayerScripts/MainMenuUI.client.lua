@@ -18,11 +18,38 @@ local SpawnPlayerEvent = Remotes:WaitForChild("SpawnPlayer")
 
 -- Get modules
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
+local CameraState = require(ReplicatedStorage.Modules.CameraState)
+
+-- Camera helper functions (since CameraController is a LocalScript, not ModuleScript)
+local function SetFirstPersonCamera()
+	player.CameraMode = Enum.CameraMode.LockFirstPerson
+	player.CameraMaxZoomDistance = 0.5
+	player.CameraMinZoomDistance = 0.5
+
+	-- Hide cursor in first-person
+	UserInputService.MouseIconEnabled = false
+	UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+
+	print("[MainMenuUI] Switched to first-person")
+end
+
+local function SetThirdPersonCamera()
+	player.CameraMode = Enum.CameraMode.Classic
+	player.CameraMaxZoomDistance = 15
+	player.CameraMinZoomDistance = 0.5
+
+	-- Show cursor in third-person
+	UserInputService.MouseIconEnabled = true
+	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+
+	print("[MainMenuUI] Switched to third-person")
+end
 
 local MainMenuUI = {}
 MainMenuUI.IsInMenu = false
 MainMenuUI.CanSpawn = false
 MainMenuUI.IsDead = false
+MainMenuUI.CursorForceLoop = nil -- Connection for forcing cursor visibility
 
 -- Create main menu UI
 function MainMenuUI.CreateUI()
@@ -90,9 +117,9 @@ function MainMenuUI.CreateUI()
 	inventoryButton.Size = UDim2.new(0, 300, 0, 60)
 	inventoryButton.Position = UDim2.new(0.5, -150, 0.5, 60)
 	inventoryButton.BackgroundColor3 = Color3.fromRGB(70, 130, 200)
-	inventoryButton.Text = "LOADOUT (G)"
+	inventoryButton.Text = "LOADOUT (G - Toggle)"
 	inventoryButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-	inventoryButton.TextSize = 24
+	inventoryButton.TextSize = 20
 	inventoryButton.Font = Enum.Font.GothamBold
 	inventoryButton.Parent = background
 
@@ -106,7 +133,7 @@ function MainMenuUI.CreateUI()
 	practiceButton.Size = UDim2.new(0, 300, 0, 50)
 	practiceButton.Position = UDim2.new(0.5, -150, 0.5, 135)
 	practiceButton.BackgroundColor3 = Color3.fromRGB(150, 100, 200)
-	practiceButton.Text = "PRACTICE MODE: OFF"
+	practiceButton.Text = "PRACTICE MODE"
 	practiceButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 	practiceButton.TextSize = 20
 	practiceButton.Font = Enum.Font.GothamBold
@@ -122,7 +149,7 @@ function MainMenuUI.CreateUI()
 	instructions.Size = UDim2.new(0, 500, 0, 60)
 	instructions.Position = UDim2.new(0.5, -250, 0.8, 0)
 	instructions.BackgroundTransparency = 1
-	instructions.Text = "Press M to return to menu after death"
+	instructions.Text = "Press M anytime to return to menu • Press G to open loadout"
 	instructions.TextColor3 = Color3.fromRGB(180, 180, 180)
 	instructions.TextSize = 16
 	instructions.Font = Enum.Font.Gotham
@@ -138,12 +165,12 @@ function MainMenuUI.CreateUI()
 
 	-- Inventory button click
 	inventoryButton.MouseButton1Click:Connect(function()
-		MainMenuUI.OpenInventory()
+		MainMenuUI.ToggleInventory()
 	end)
 
 	-- Practice button click
 	practiceButton.MouseButton1Click:Connect(function()
-		MainMenuUI.TogglePracticeMode()
+		MainMenuUI.StartPracticeMode()
 	end)
 
 	print("[MainMenuUI] UI created")
@@ -187,18 +214,26 @@ function MainMenuUI.SpawnPlayer()
 
 	print("[MainMenuUI] Spawning player...")
 
-	-- Request spawn from server
-	SpawnPlayerEvent:FireServer()
-
 	-- Close main menu
 	MainMenuUI.Close()
 
-	-- Switch to first-person mode
-	local cameraController = require(script.Parent.CameraController)
-	cameraController.SetFirstPerson()
-
 	-- Reset death state
 	MainMenuUI.IsDead = false
+
+	-- Request spawn from server
+	SpawnPlayerEvent:FireServer()
+
+	-- Wait for character to spawn, then switch to first-person
+	task.spawn(function()
+		local character = player.Character or player.CharacterAdded:Wait()
+		character:WaitForChild("HumanoidRootPart")
+
+		-- Small delay to ensure camera is ready
+		task.wait(0.1)
+
+		-- Switch to first-person mode
+		SetFirstPersonCamera()
+	end)
 end
 
 -- Open main menu
@@ -210,10 +245,28 @@ function MainMenuUI.Open()
 
 	mainMenu.Enabled = true
 	MainMenuUI.IsInMenu = true
+	CameraState.MenuOpen = true -- Disable camera controller
 
-	-- Switch to third-person mode
-	local cameraController = require(script.Parent.CameraController)
-	cameraController.SetThirdPerson()
+	-- FORCE third-person mode and show cursor
+	player.CameraMode = Enum.CameraMode.Classic
+	player.CameraMaxZoomDistance = 15
+	player.CameraMinZoomDistance = 0.5
+	UserInputService.MouseIconEnabled = true
+	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+
+	-- Stop any existing cursor force loop
+	if MainMenuUI.CursorForceLoop then
+		MainMenuUI.CursorForceLoop:Disconnect()
+	end
+
+	-- Continuously force cursor to be visible while menu is open
+	local RunService = game:GetService("RunService")
+	MainMenuUI.CursorForceLoop = RunService.RenderStepped:Connect(function()
+		if MainMenuUI.IsInMenu then
+			UserInputService.MouseIconEnabled = true
+			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		end
+	end)
 
 	-- Hide game HUD
 	local gameHUD = playerGui:FindFirstChild("GameHUD")
@@ -221,7 +274,7 @@ function MainMenuUI.Open()
 		gameHUD.Enabled = false
 	end
 
-	print("[MainMenuUI] Opened - Switched to third-person")
+	print("[MainMenuUI] Opened - Switched to third-person, forcing cursor visible")
 end
 
 -- Close main menu
@@ -232,6 +285,13 @@ function MainMenuUI.Close()
 	end
 
 	MainMenuUI.IsInMenu = false
+	CameraState.MenuOpen = false -- Re-enable camera controller
+
+	-- Stop cursor force loop
+	if MainMenuUI.CursorForceLoop then
+		MainMenuUI.CursorForceLoop:Disconnect()
+		MainMenuUI.CursorForceLoop = nil
+	end
 
 	-- Show game HUD
 	local gameHUD = playerGui:FindFirstChild("GameHUD")
@@ -242,76 +302,120 @@ function MainMenuUI.Close()
 	print("[MainMenuUI] Closed")
 end
 
--- Open inventory (only in main menu)
-function MainMenuUI.OpenInventory()
+-- Return to menu (teleport to menu position and open menu)
+function MainMenuUI.ReturnToMenu()
+	print("[MainMenuUI] Returning to menu...")
+
+	-- Immediately FORCE third-person and show cursor
+	player.CameraMode = Enum.CameraMode.Classic
+	player.CameraMaxZoomDistance = 15
+	player.CameraMinZoomDistance = 0.5
+	UserInputService.MouseIconEnabled = true
+	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+
+	-- Teleport player to menu position (high above map)
+	if player.Character then
+		local humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart")
+		if humanoidRootPart then
+			-- Teleport to a position high above the map
+			humanoidRootPart.CFrame = CFrame.new(0, 500, 0)
+
+			-- Set velocity to zero
+			humanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+			humanoidRootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+		end
+	end
+
+	-- Open menu
+	MainMenuUI.Open()
+end
+
+-- Toggle inventory (only in main menu)
+function MainMenuUI.ToggleInventory()
 	if not MainMenuUI.IsInMenu then
 		warn("[MainMenuUI] Can only change loadout in Main Menu!")
 		return
 	end
 
-	-- Find InventoryUI ScreenGui and open it
+	-- Find InventoryUI ScreenGui and toggle it
 	local inventoryUI = playerGui:FindFirstChild("InventoryUI")
 	if inventoryUI then
-		inventoryUI.Enabled = true
-		print("[MainMenuUI] Opened inventory")
+		inventoryUI.Enabled = not inventoryUI.Enabled
+		if inventoryUI.Enabled then
+			print("[MainMenuUI] Opened inventory")
+		else
+			print("[MainMenuUI] Closed inventory")
+		end
 	else
 		warn("[MainMenuUI] InventoryUI not found - make sure InventoryUI.lua is running")
 	end
 end
 
--- Toggle practice mode
-function MainMenuUI.TogglePracticeMode()
-	-- Get current practice mode state
-	local currentState = GameConfig.PRACTICE_MODE
+-- Start practice mode
+function MainMenuUI.StartPracticeMode()
+	print("[MainMenuUI] Starting practice mode...")
 
-	-- Request toggle from server
+	-- Enable practice mode on server
 	local TogglePracticeModeEvent = Remotes:FindFirstChild("TogglePracticeMode")
 	if TogglePracticeModeEvent then
-		TogglePracticeModeEvent:FireServer()
-		print(string.format("[MainMenuUI] Toggling practice mode: %s -> %s", tostring(currentState), tostring(not currentState)))
-	else
-		warn("[MainMenuUI] TogglePracticeMode remote not found")
+		TogglePracticeModeEvent:FireServer(true) -- Force enable practice mode
 	end
-end
 
--- Update practice button display
-function MainMenuUI.UpdatePracticeButton(isEnabled)
-	local mainMenu = playerGui:FindFirstChild("MainMenuUI")
-	if not mainMenu then return end
+	-- Close main menu
+	MainMenuUI.Close()
 
-	local background = mainMenu:FindFirstChild("Background")
-	if not background then return end
+	-- Reset death state
+	MainMenuUI.IsDead = false
 
-	local practiceButton = background:FindFirstChild("PracticeButton")
-	if practiceButton then
-		if isEnabled then
-			practiceButton.Text = "PRACTICE MODE: ON"
-			practiceButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
-		else
-			practiceButton.Text = "PRACTICE MODE: OFF"
-			practiceButton.BackgroundColor3 = Color3.fromRGB(150, 100, 200)
-		end
-	end
+	-- Spawn player and wait for character
+	SpawnPlayerEvent:FireServer()
+
+	-- Wait for character to spawn, then switch to first-person
+	task.spawn(function()
+		local character = player.Character or player.CharacterAdded:Wait()
+		character:WaitForChild("HumanoidRootPart")
+
+		-- Small delay to ensure camera is ready
+		task.wait(0.1)
+
+		-- Switch to first-person mode
+		SetFirstPersonCamera()
+	end)
 end
 
 -- Handle round state changes
 function MainMenuUI.OnRoundStateChanged(roundData)
 	if roundData.State == "Waiting" then
-		MainMenuUI.Open()
+		-- Always open menu during waiting (unless player manually closed it)
+		if not MainMenuUI.IsInMenu then
+			MainMenuUI.Open()
+		end
 		MainMenuUI.UpdatePlayButton(false, "Waiting for players...")
 
 	elseif roundData.State == "Intermission" then
-		MainMenuUI.Open()
-		local timeLeft = roundData.TimeRemaining or GameConfig.INTERMISSION_TIME
-		MainMenuUI.UpdatePlayButton(true, string.format("Round starting in %d...", timeLeft))
+		-- In practice mode, don't auto-open menu during intermission
+		if GameConfig.PRACTICE_MODE then
+			-- Just update button if menu is already open
+			if MainMenuUI.IsInMenu then
+				MainMenuUI.UpdatePlayButton(true, "Practice Mode Active - Click PLAY to respawn")
+			end
+		else
+			-- Open menu for intermission (unless player is in game and closed it manually)
+			if not MainMenuUI.IsInMenu then
+				MainMenuUI.Open()
+			end
+			local timeLeft = roundData.TimeRemaining or GameConfig.INTERMISSION_TIME
+			MainMenuUI.UpdatePlayButton(true, string.format("Round starting in %d...", timeLeft))
+		end
 
 	elseif roundData.State == "Playing" then
-		-- Allow spawning during gameplay (if dead)
+		-- Don't auto-open menu during playing, just update button if menu is already open
 		if MainMenuUI.IsInMenu then
 			MainMenuUI.UpdatePlayButton(true, "Round in progress - Click PLAY to spawn")
 		end
 
 	elseif roundData.State == "RoundEnd" then
+		-- Always open menu at round end
 		MainMenuUI.Open()
 		local winMessage = roundData.Message or "Round ended!"
 		MainMenuUI.UpdatePlayButton(false, winMessage)
@@ -354,7 +458,6 @@ function MainMenuUI.Initialize()
 	if PracticeModeUpdateEvent then
 		PracticeModeUpdateEvent.OnClientEvent:Connect(function(isEnabled)
 			GameConfig.PRACTICE_MODE = isEnabled
-			MainMenuUI.UpdatePracticeButton(isEnabled)
 			print(string.format("[MainMenuUI] Practice mode updated: %s", isEnabled and "ON" or "OFF"))
 		end)
 	end
@@ -369,27 +472,27 @@ function MainMenuUI.Initialize()
 		MainMenuUI.OnCharacterAdded(player.Character)
 	end
 
-	-- Bind M key to open menu (only after death)
+	-- Bind M key to return to menu (works at any time)
 	-- Bind G key to open inventory (only in menu)
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if gameProcessed then return end
 
-		-- M key - open menu after death
+		-- M key - return to menu at any time
 		if input.KeyCode == Enum.KeyCode.M then
-			if MainMenuUI.IsDead then
-				MainMenuUI.Open()
+			if not MainMenuUI.IsInMenu then
+				MainMenuUI.ReturnToMenu()
 			end
 		end
 
-		-- G key - open inventory (only in Main Menu)
+		-- G key - toggle inventory (only in Main Menu)
 		if input.KeyCode == Enum.KeyCode.G then
 			if MainMenuUI.IsInMenu then
-				MainMenuUI.OpenInventory()
+				MainMenuUI.ToggleInventory()
 			end
 		end
 	end)
 
-	print("[MainMenuUI] Initialized - Press M to return to menu | Press G to open loadout")
+	print("[MainMenuUI] Initialized - Press M to return to menu | Press G to toggle loadout")
 end
 
 -- Start

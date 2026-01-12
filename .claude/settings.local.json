@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rojo serve:*)",
+      "Bash(where:*)",
+      "Bash(ls:*)",
+      "Bash(powershell.exe -Command \"rojo serve\")",
+      "Bash(powershell.exe -Command \"Get-Command rojo -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")",
+      "Bash(powershell.exe:*)",
+      "Bash(/c/users/nikol/rojo/rojo.exe serve:*)"
+    ]
+  }
+}

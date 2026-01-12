@@ -62,29 +62,36 @@ end
 
 -- Wait for minimum players
 function RoundManager.WaitForPlayers()
-	-- Skip waiting if in practice mode
-	if GameConfig.PRACTICE_MODE then
-		print("[RoundManager] Practice mode enabled - skipping player requirement")
-		RoundStateEvent:FireAllClients({
-			State = "Waiting",
-			Message = "Practice Mode - No player requirement"
-		})
-		task.wait(2) -- Brief wait to show the message
-		return
-	end
-
 	print("[RoundManager] Waiting for players...")
 
-	RoundStateEvent:FireAllClients({
-		State = "Waiting",
-		Message = string.format("Waiting for %d players...", GameConfig.MIN_PLAYERS)
-	})
+	-- Loop until we have enough players OR practice mode is enabled
+	while true do
+		-- Check if practice mode is enabled
+		if GameConfig.PRACTICE_MODE then
+			print("[RoundManager] Practice mode enabled - skipping player requirement")
+			RoundStateEvent:FireAllClients({
+				State = "Waiting",
+				Message = "Practice Mode - Starting round..."
+			})
+			task.wait(1) -- Brief wait to show the message
+			return
+		end
 
-	while #Players:GetPlayers() < GameConfig.MIN_PLAYERS do
+		-- Check player count
+		local playerCount = #Players:GetPlayers()
+		if playerCount >= GameConfig.MIN_PLAYERS then
+			print(string.format("[RoundManager] %d players found, starting intermission", playerCount))
+			return
+		end
+
+		-- Update waiting message
+		RoundStateEvent:FireAllClients({
+			State = "Waiting",
+			Message = string.format("Waiting for players... (%d/%d)", playerCount, GameConfig.MIN_PLAYERS)
+		})
+
 		task.wait(1)
 	end
-
-	print(string.format("[RoundManager] %d players found, starting intermission", #Players:GetPlayers()))
 end
 
 -- Countdown timer
@@ -104,15 +111,30 @@ end
 function RoundManager.StartRound()
 	print("[RoundManager] Starting round...")
 
+	-- Load map
+	local MapManager = require(script.Parent.MapManager)
+	local mapName = MapManager.SelectRandomMap()
+
+	if mapName then
+		local success = MapManager.LoadMap(mapName)
+		if not success then
+			warn("[RoundManager] Failed to load map, using default spawns")
+		else
+			RoundManager.CurrentMap = mapName
+		end
+	else
+		warn("[RoundManager] No map selected, using default spawns")
+	end
+
 	-- Start game mode
 	local GameModeController = require(script.Parent.GameModeController)
 
-	-- TODO: Select game mode based on voting or rotation
-	-- For now, always use TeamDeathmatch
-	local modeName = "TeamDeathmatch"
-	GameModeController.StartMode(modeName)
+	-- Use game mode rotation system
+	GameModeController.StartNextMode()
 
-	RoundManager.CurrentGameMode = modeName
+	-- Get current mode name
+	local currentMode = GameModeController.GetCurrentMode()
+	RoundManager.CurrentGameMode = currentMode and currentMode.ModeName or "Unknown"
 
 	-- Respawn all players
 	local TeamManager = require(script.Parent.TeamManager)
@@ -125,7 +147,7 @@ function RoundManager.StartRound()
 	RoundManager.TimeRemaining = GameConfig.ROUND_TIME
 	RoundManager.WinningTeam = nil
 
-	print("[RoundManager] Round started with game mode:", modeName)
+	print("[RoundManager] Round started with game mode:", RoundManager.CurrentGameMode, "on map:", mapName or "default")
 end
 
 -- Play the round
@@ -191,6 +213,10 @@ function RoundManager.EndRound(winningTeam)
 	-- Stop game mode
 	local GameModeController = require(script.Parent.GameModeController)
 	GameModeController.StopCurrentMode()
+
+	-- Unload map
+	local MapManager = require(script.Parent.MapManager)
+	MapManager.UnloadMap()
 
 	-- Notify clients
 	RoundStateEvent:FireAllClients({

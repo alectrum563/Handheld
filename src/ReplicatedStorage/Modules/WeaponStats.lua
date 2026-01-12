@@ -14,11 +14,17 @@ WeaponStats.Weapons = {
 		Damage = 20,              -- Base damage at optimal range
 		HeadshotMultiplier = 2.0, -- 40 damage headshots
 		FireRate = 0.1,           -- seconds between shots (10 rounds/sec)
-		Range = 80,               -- Max effective range (studs)
+		Range = 1000,             -- Very long range - travels until hitting wall/target
 		DamageFalloffStart = 40,  -- Distance where falloff begins
 		MinDamage = 8,            -- Minimum damage at max range
-		MagazineSize = 15,
+		MagazineSize = 20,        -- Increased from 15
 		ReloadTime = 1.5,
+
+		-- Recoil (light for fast pistol)
+		RecoilVertical = 0.15,    -- Vertical kick in radians
+		RecoilHorizontal = 0.05,  -- Horizontal kick in radians
+		BulletRadius = 0.5,       -- Spherecast radius for bullet magnetism
+		BulletSpread = 0.35,      -- High spread (0-1, higher = more inaccurate) - fast fire rate = less accurate
 
 		-- Visual/Audio
 		MuzzleFlashColor = Color3.fromRGB(255, 200, 100),
@@ -32,11 +38,17 @@ WeaponStats.Weapons = {
 		Damage = 35,              -- 3 body shots or 2 headshots to kill
 		HeadshotMultiplier = 2.0, -- 70 damage headshots
 		FireRate = 0.25,          -- 4 rounds/sec
-		Range = 120,
+		Range = 1000,             -- Very long range - travels until hitting wall/target
 		DamageFalloffStart = 60,
 		MinDamage = 15,
 		MagazineSize = 10,
 		ReloadTime = 2.0,
+
+		-- Recoil (medium for balanced pistol)
+		RecoilVertical = 0.2,     -- Vertical kick in radians
+		RecoilHorizontal = 0.08,  -- Horizontal kick in radians
+		BulletRadius = 0.6,       -- Spherecast radius for bullet magnetism
+		BulletSpread = 0.15,      -- Medium spread - balanced fire rate = balanced accuracy
 
 		-- Visual/Audio
 		MuzzleFlashColor = Color3.fromRGB(255, 180, 80),
@@ -50,11 +62,17 @@ WeaponStats.Weapons = {
 		Damage = 50,              -- 2 body shots or 1 headshot to kill
 		HeadshotMultiplier = 2.0, -- 100 damage headshots (instant kill)
 		FireRate = 0.5,           -- 2 rounds/sec
-		Range = 150,
+		Range = 1000,             -- Very long range - travels until hitting wall/target
 		DamageFalloffStart = 80,
 		MinDamage = 25,
 		MagazineSize = 6,
 		ReloadTime = 2.5,
+
+		-- Recoil (heavy for hand cannon)
+		RecoilVertical = 0.3,     -- Strong vertical kick
+		RecoilHorizontal = 0.12,  -- Strong horizontal kick
+		BulletRadius = 0.7,       -- Larger spherecast radius
+		BulletSpread = 0.05,      -- Low spread - slow fire rate = very accurate
 
 		-- Visual/Audio
 		MuzzleFlashColor = Color3.fromRGB(255, 150, 50),

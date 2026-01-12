@@ -7,16 +7,19 @@
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
 local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
+local CameraState = require(ReplicatedStorage.Modules.CameraState)
 
 local MovementController = {}
 
 -- Movement state
-MovementController.CurrentState = "Walk" -- Walk, Run, Sprint
+MovementController.CurrentState = "Walk" -- Walk, Run, Sprint, Slide
 MovementController.IsWallJumping = false
+MovementController.IsSliding = false
 MovementController.LastWPressed = 0
 MovementController.ShiftHoldTime = 0
 
@@ -26,10 +29,17 @@ local RUN_SPEED = GameConfig.RUN_SPEED
 local SPRINT_SPEED = GameConfig.SPRINT_SPEED
 
 -- Wall jump settings
-local WALL_JUMP_COOLDOWN = 0.5
+local WALL_JUMP_COOLDOWN = 0.8 -- Increased cooldown for super jump
 local WALL_JUMP_FORCE = GameConfig.WALL_JUMP_POWER
 local WALL_DETECT_DISTANCE = 3
 local lastWallJumpTime = 0
+
+-- Slide settings
+local SLIDE_DURATION = 0.8 -- seconds (shorter, snappier slide)
+local SLIDE_SPEED = 45 -- studs/second (faster than sprint)
+local SLIDE_COOLDOWN = 0.5 -- cooldown after slide ends
+local SLIDE_CAMERA_OFFSET = -2 -- lower camera by 2 studs during slide
+local lastSlideTime = 0
 
 -- Sprint activation
 local DOUBLE_TAP_TIME = 0.3 -- Time window for double-tap W
@@ -68,6 +78,11 @@ function MovementController.SetupInputHandling()
 
 		-- Shift key for running/sprinting
 		if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+			-- Don't allow sprint while aiming
+			if CameraState.IsAiming then
+				return
+			end
+
 			shiftPressed = true
 			shiftPressTime = tick()
 			MovementController.CurrentState = "Run"
@@ -79,8 +94,8 @@ function MovementController.SetupInputHandling()
 			local currentTime = tick()
 			local timeSinceLastW = currentTime - MovementController.LastWPressed
 
-			-- Double-tap W to sprint
-			if timeSinceLastW < DOUBLE_TAP_TIME then
+			-- Double-tap W to sprint (not while aiming)
+			if timeSinceLastW < DOUBLE_TAP_TIME and not CameraState.IsAiming then
 				MovementController.CurrentState = "Sprint"
 				humanoid.WalkSpeed = SPRINT_SPEED
 				print("[MovementController] Sprint activated (double-tap W)")
@@ -92,6 +107,11 @@ function MovementController.SetupInputHandling()
 		-- Space for wall jump
 		if input.KeyCode == Enum.KeyCode.Space then
 			MovementController.AttemptWallJump()
+		end
+
+		-- C key for slide (while sprinting)
+		if input.KeyCode == Enum.KeyCode.C then
+			MovementController.AttemptSlide()
 		end
 	end)
 
@@ -126,8 +146,18 @@ function MovementController.SetupInputHandling()
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		if not humanoid then return end
 
-		-- Check if holding Shift for long enough to sprint
-		if shiftPressed then
+		-- Don't interfere with sliding
+		if MovementController.IsSliding then return end
+
+		-- If aiming, force return to walk
+		if CameraState.IsAiming and MovementController.CurrentState ~= "Walk" then
+			MovementController.CurrentState = "Walk"
+			humanoid.WalkSpeed = WALK_SPEED
+			return
+		end
+
+		-- Check if holding Shift for long enough to sprint (but not while aiming)
+		if shiftPressed and not CameraState.IsAiming then
 			local holdDuration = tick() - shiftPressTime
 			if holdDuration >= SHIFT_HOLD_TIME_FOR_SPRINT and MovementController.CurrentState == "Run" then
 				MovementController.CurrentState = "Sprint"
@@ -137,7 +167,7 @@ function MovementController.SetupInputHandling()
 		end
 
 		-- Auto-return to walk if not moving
-		if humanoid.MoveVector.Magnitude == 0 and MovementController.CurrentState ~= "Walk" then
+		if humanoid.MoveDirection.Magnitude == 0 and MovementController.CurrentState ~= "Walk" then
 			MovementController.CurrentState = "Walk"
 			humanoid.WalkSpeed = WALK_SPEED
 		end
@@ -232,17 +262,20 @@ function MovementController.PerformWallJump(wallNormal)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not rootPart or not humanoid then return end
 
-	-- Calculate jump direction (away from wall and upward)
-	local jumpDirection = (wallNormal + Vector3.new(0, 1, 0)).Unit
+	-- Calculate jump direction with strong horizontal push off wall
+	-- More horizontal (wall push) + lower vertical (jump height)
+	local horizontalPush = wallNormal * 2.0 -- Double the horizontal component
+	local verticalPush = Vector3.new(0, 3.5, 0) -- Reduced to 3.5 studs for lower jump
+	local jumpDirection = (horizontalPush + verticalPush).Unit
 
-	-- Apply force
+	-- Apply force with strong velocity
 	local bodyVelocity = Instance.new("BodyVelocity")
-	bodyVelocity.Velocity = jumpDirection * WALL_JUMP_FORCE
-	bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+	bodyVelocity.Velocity = jumpDirection * WALL_JUMP_FORCE * 1.9 -- 1.9x force multiplier (reduced for lower jump)
+	bodyVelocity.MaxForce = Vector3.new(10000, 10000, 10000)
 	bodyVelocity.Parent = rootPart
 
-	-- Remove after a short time
-	task.delay(0.2, function()
+	-- Keep force active for good momentum
+	task.delay(0.3, function()
 		if bodyVelocity and bodyVelocity.Parent then
 			bodyVelocity:Destroy()
 		end
@@ -252,8 +285,102 @@ function MovementController.PerformWallJump(wallNormal)
 	print("[MovementController] Wall jump performed!")
 
 	-- Reset flag after landing
-	task.delay(0.5, function()
+	task.delay(0.8, function()
 		MovementController.IsWallJumping = false
+	end)
+end
+
+-- Attempt to slide
+function MovementController.AttemptSlide()
+	local character = player.Character
+	if not character then return end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local rootPart = character:FindFirstChild("HumanoidRootPart")
+	if not humanoid or not rootPart then return end
+
+	-- Check if already sliding
+	if MovementController.IsSliding then return end
+
+	-- Check cooldown
+	local currentTime = tick()
+	if currentTime - lastSlideTime < SLIDE_COOLDOWN then
+		return
+	end
+
+	-- Must be sprinting to slide
+	if MovementController.CurrentState ~= "Sprint" then
+		return
+	end
+
+	-- Must be moving to slide
+	if humanoid.MoveDirection.Magnitude < 0.1 then
+		return
+	end
+
+	-- Perform the slide
+	MovementController.PerformSlide()
+	lastSlideTime = currentTime
+end
+
+-- Perform slide
+function MovementController.PerformSlide()
+	local character = player.Character
+	if not character then return end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local rootPart = character:FindFirstChild("HumanoidRootPart")
+	if not humanoid or not rootPart then return end
+
+	-- Get current movement direction
+	local slideDirection = humanoid.MoveDirection
+	if slideDirection.Magnitude < 0.1 then return end
+
+	-- Start slide
+	MovementController.IsSliding = true
+	MovementController.CurrentState = "Slide"
+
+	-- Disable player control by setting WalkSpeed to 0
+	humanoid.WalkSpeed = 0
+
+	-- Store original camera offset
+	local originalCameraOffset = humanoid.CameraOffset
+
+	-- Smoothly lower camera
+	local cameraLowerTween = TweenService:Create(
+		humanoid,
+		TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{CameraOffset = Vector3.new(0, SLIDE_CAMERA_OFFSET, 0)}
+	)
+	cameraLowerTween:Play()
+
+	-- Apply slide velocity
+	local bodyVelocity = Instance.new("BodyVelocity")
+	bodyVelocity.Name = "SlideVelocity"
+	bodyVelocity.Velocity = slideDirection * SLIDE_SPEED
+	bodyVelocity.MaxForce = Vector3.new(10000, 0, 10000) -- Only horizontal force
+	bodyVelocity.Parent = rootPart
+
+	-- End slide after duration
+	task.delay(SLIDE_DURATION, function()
+		if bodyVelocity and bodyVelocity.Parent then
+			bodyVelocity:Destroy()
+		end
+
+		if humanoid and humanoid.Parent then
+			-- Smoothly restore camera offset
+			local cameraRaiseTween = TweenService:Create(
+				humanoid,
+				TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+				{CameraOffset = originalCameraOffset}
+			)
+			cameraRaiseTween:Play()
+
+			-- Return to walk speed
+			MovementController.IsSliding = false
+			MovementController.CurrentState = "Walk"
+			humanoid.WalkSpeed = WALK_SPEED
+		end
 	end)
 end
 
@@ -264,6 +391,7 @@ player.CharacterAdded:Connect(function(character)
 	-- Reset to walk speed
 	humanoid.WalkSpeed = WALK_SPEED
 	MovementController.CurrentState = "Walk"
+	MovementController.IsSliding = false
 
 	-- Re-setup input handling
 	task.wait(0.1)

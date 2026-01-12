@@ -13,12 +13,17 @@ local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 -- Import game modes
 local GameModes = ServerScriptService.Core.GameModes
 local TeamDeathmatch = require(GameModes.TeamDeathmatch)
+local Domination = require(GameModes.Domination)
+local SearchAndDestroy = require(GameModes.SearchAndDestroy)
+local Hardpoint = require(GameModes.Hardpoint)
 
 local GameModeController = {}
 
 -- State
 GameModeController.CurrentMode = nil
 GameModeController.AvailableModes = {}
+GameModeController.ModeRotation = {} -- List of modes to rotate through
+GameModeController.CurrentRotationIndex = 0
 GameModeController.UpdateConnection = nil
 
 -- Initialize game mode controller
@@ -38,6 +43,23 @@ end
 function GameModeController.RegisterModes()
 	-- Register Team Deathmatch
 	GameModeController.AvailableModes["TeamDeathmatch"] = TeamDeathmatch
+
+	-- Register Domination
+	GameModeController.AvailableModes["Domination"] = Domination
+
+	-- Register Search & Destroy
+	GameModeController.AvailableModes["SearchAndDestroy"] = SearchAndDestroy
+
+	-- Register Hardpoint
+	GameModeController.AvailableModes["Hardpoint"] = Hardpoint
+
+	-- Setup default rotation
+	GameModeController.ModeRotation = GameConfig.GAME_MODE_ROTATION or {
+		"TeamDeathmatch",
+		"Domination",
+		"Hardpoint",
+		"SearchAndDestroy"
+	}
 
 	print(string.format("[GameModeController] Registered %d game modes",
 		#GameModeController.GetAvailableModeNames()))
@@ -178,6 +200,29 @@ function GameModeController.GetWinner()
 	else
 		return "Draw"
 	end
+end
+
+-- Get next mode in rotation
+function GameModeController.GetNextModeInRotation()
+	if #GameModeController.ModeRotation == 0 then
+		return "TeamDeathmatch" -- Default
+	end
+
+	GameModeController.CurrentRotationIndex = (GameModeController.CurrentRotationIndex % #GameModeController.ModeRotation) + 1
+	return GameModeController.ModeRotation[GameModeController.CurrentRotationIndex]
+end
+
+-- Start next mode in rotation
+function GameModeController.StartNextMode()
+	local nextMode = GameModeController.GetNextModeInRotation()
+	return GameModeController.StartMode(nextMode)
+end
+
+-- Set mode rotation
+function GameModeController.SetModeRotation(modeNames)
+	GameModeController.ModeRotation = modeNames
+	GameModeController.CurrentRotationIndex = 0
+	print(string.format("[GameModeController] Mode rotation updated: %s", table.concat(modeNames, ", ")))
 end
 
 return GameModeController

@@ -28,11 +28,20 @@ GameConfig.WALL_JUMP_POWER = 75
 
 -- Game Mode Settings
 GameConfig.AVAILABLE_MODES = {"TeamDeathmatch", "Domination", "SearchAndDestroy", "Hardpoint"}
+GameConfig.GAME_MODE_ROTATION = {"TeamDeathmatch", "Domination", "Hardpoint", "SearchAndDestroy"} -- Order of mode rotation
+
+-- Team Deathmatch
 GameConfig.TDM_KILL_LIMIT = 50
-GameConfig.DOMINATION_SCORE_LIMIT = 200
-GameConfig.SAD_ROUNDS = 9 -- best of 9 rounds
-GameConfig.HARDPOINT_SCORE_LIMIT = 250
-GameConfig.HARDPOINT_ROTATION_TIME = 60 -- seconds before hardpoint moves
+
+-- Domination
+GameConfig.DOM_SCORE_LIMIT = 200
+
+-- Search & Destroy
+GameConfig.SAD_ROUNDS_TO_WIN = 6 -- first to 6 rounds wins
+
+-- Hardpoint
+GameConfig.HP_SCORE_LIMIT = 250
+GameConfig.HP_ROTATION_TIME = 60 -- seconds before hardpoint moves
 
 -- Map Settings
 GameConfig.AVAILABLE_MAPS = {"JungleRuins", "Mine", "CitySquare", "VirtualMatrix"}

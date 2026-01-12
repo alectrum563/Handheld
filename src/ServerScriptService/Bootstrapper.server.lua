@@ -8,10 +8,14 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+-- Require config
+local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
+
 -- Require core modules
 local Core = ServerScriptService.Core
 local TeamManager = require(Core.TeamManager)
 local RoundManager = require(Core.RoundManager)
+local MapManager = require(Core.MapManager)
 local InventoryManager = require(Core.InventoryManager)
 local EconomyManager = require(Core.EconomyManager)
 local HitDetection = require(Core.HitDetection)
@@ -30,8 +34,14 @@ print("==============================================")
 print("         FPS Game Server Starting...         ")
 print("==============================================")
 
+-- Build weapons FIRST (before any systems try to use them)
+local WeaponBuilder = require(Core.WeaponBuilder)
+
 -- Initialize teams
 TeamManager.Initialize()
+
+-- Initialize map manager
+MapManager.Initialize()
 
 -- Initialize game mode controller
 GameModeController.Initialize()
@@ -60,24 +70,8 @@ EquipWeaponEvent.OnServerEvent:Connect(function(player, weaponId)
 	local success = InventoryManager.EquipWeapon(player, weaponId)
 
 	if success then
-		-- Equip weapon if they already have a character
-		if player.Character then
-			-- Clear current weapons
-			for _, tool in pairs(player.Backpack:GetChildren()) do
-				if tool:IsA("Tool") then
-					tool:Destroy()
-				end
-			end
-
-			for _, tool in pairs(player.Character:GetChildren()) do
-				if tool:IsA("Tool") then
-					tool:Destroy()
-				end
-			end
-
-			-- Equip new weapon
-			TeamManager.EquipWeapon(player)
-		end
+		print(string.format("[Server] Successfully set equipped weapon for %s", player.Name))
+		-- Note: Weapon will be equipped when player spawns
 	end
 end)
 
@@ -85,23 +79,52 @@ end)
 SpawnPlayerEvent.OnServerEvent:Connect(function(player)
 	print(string.format("[Server] %s requesting to spawn", player.Name))
 
-	-- Check if round is active (Intermission or Playing)
+	-- Check if round is active (Intermission or Playing) OR practice mode is enabled
 	local roundState = RoundManager.GetState()
-	if roundState ~= "Intermission" and roundState ~= "Playing" then
+	if roundState ~= "Intermission" and roundState ~= "Playing" and not GameConfig.PRACTICE_MODE then
 		warn(string.format("[Server] Cannot spawn %s - round not active (state: %s)", player.Name, roundState))
 		return
 	end
 
+	-- Clear any existing weapons before spawning
+	if player.Character then
+		for _, tool in pairs(player.Backpack:GetChildren()) do
+			if tool:IsA("Tool") then
+				tool:Destroy()
+			end
+		end
+
+		for _, tool in pairs(player.Character:GetChildren()) do
+			if tool:IsA("Tool") then
+				tool:Destroy()
+			end
+		end
+	end
+
 	-- Respawn the player
 	TeamManager.RespawnPlayer(player, true)
+
+	-- Wait a moment for character to fully load, then equip weapon
+	task.spawn(function()
+		local character = player.Character or player.CharacterAdded:Wait()
+		character:WaitForChild("HumanoidRootPart")
+		task.wait(0.1)
+
+		-- Equip their selected weapon
+		TeamManager.EquipWeapon(player)
+	end)
 end)
 
 -- Handle practice mode toggle
-TogglePracticeModeEvent.OnServerEvent:Connect(function(player)
-	print(string.format("[Server] %s toggling practice mode", player.Name))
+TogglePracticeModeEvent.OnServerEvent:Connect(function(player, forceEnable)
+	print(string.format("[Server] %s requesting practice mode", player.Name))
 
-	-- Toggle practice mode
-	GameConfig.PRACTICE_MODE = not GameConfig.PRACTICE_MODE
+	-- If forceEnable is provided, set to that value; otherwise toggle
+	if forceEnable ~= nil then
+		GameConfig.PRACTICE_MODE = forceEnable
+	else
+		GameConfig.PRACTICE_MODE = not GameConfig.PRACTICE_MODE
+	end
 
 	-- Notify all clients
 	PracticeModeUpdateEvent:FireAllClients(GameConfig.PRACTICE_MODE)
@@ -128,12 +151,6 @@ Players.PlayerAdded:Connect(function(player)
 	-- Load character but don't spawn them in-game yet
 	-- They will spawn from Main Menu when they click Play
 	player:LoadCharacter()
-
-	-- When character spawns, equip weapon
-	player.CharacterAdded:Connect(function(character)
-		-- Give them their weapon on spawn
-		TeamManager.EquipWeapon(player)
-	end)
 end)
 
 -- Handle player leaving

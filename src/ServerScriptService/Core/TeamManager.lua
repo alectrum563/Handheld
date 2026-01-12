@@ -146,16 +146,61 @@ function TeamManager.EquipWeapon(player)
 	end
 
 	weaponClone.Parent = player.Backpack
+	print(string.format("[TeamManager] Weapon added to backpack for %s", player.Name))
+
+	-- Auto-equip weapon to character's hand by parenting directly to character
+	task.spawn(function()
+		task.wait(0.3) -- Slightly longer delay
+		if player.Character and weaponClone.Parent then
+			-- Move tool from backpack to character (equips it)
+			weaponClone.Parent = player.Character
+			print(string.format("[TeamManager] Auto-equipped %s to %s's character", weaponName, player.Name))
+		else
+			warn(string.format("[TeamManager] Could not auto-equip for %s - Character exists: %s, Tool exists: %s",
+				player.Name,
+				tostring(player.Character ~= nil),
+				tostring(weaponClone.Parent ~= nil)))
+		end
+	end)
+
+	-- Notify client that weapon was equipped
+	local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
+	if Remotes then
+		local EquipWeaponEvent = Remotes:FindFirstChild("EquipWeapon")
+		if EquipWeaponEvent then
+			EquipWeaponEvent:FireClient(player, weaponName)
+		end
+	end
 
 	print(string.format("[TeamManager] Equipped %s (%s skin) to %s", weaponName, skinId, player.Name))
 end
 
 -- Get random spawn point for team
 function TeamManager.GetTeamSpawnPoint(team)
+	-- Try to use MapManager first (for dynamic map loading)
+	local MapManager = require(script.Parent.MapManager)
+	local spawn = MapManager.GetRandomSpawn(team.Name)
+
+	if spawn then
+		if spawn:IsA("BasePart") then
+			return spawn.CFrame + Vector3.new(0, 3, 0)
+		elseif spawn:IsA("Model") and spawn.PrimaryPart then
+			return spawn:GetPrimaryPartCFrame() + Vector3.new(0, 3, 0)
+		end
+	end
+
+	-- Fallback: Look for spawns in Workspace directly (legacy support)
 	local spawnFolder = workspace:FindFirstChild("SpawnLocations")
 	if not spawnFolder then
-		warn("[TeamManager] SpawnLocations folder not found in Workspace!")
-		return CFrame.new(0, 10, 0)
+		-- No spawn folder - use VERY HIGH default positions to avoid maps
+		warn("[TeamManager] No SpawnLocations folder - using default spawn position")
+		if team.Name == GameConfig.TEAM_1_NAME then
+			print("[TeamManager] Spawning at Y=150 (left)")
+			return CFrame.new(-50, 150, 0) -- Much higher spawn
+		else
+			print("[TeamManager] Spawning at Y=150 (right)")
+			return CFrame.new(50, 150, 0)
+		end
 	end
 
 	local teamSpawnFolder
@@ -166,14 +211,28 @@ function TeamManager.GetTeamSpawnPoint(team)
 	end
 
 	if not teamSpawnFolder then
-		warn("[TeamManager] Team spawn folder not found!")
-		return CFrame.new(0, 10, 0)
+		-- No team spawn folder - use VERY HIGH default positions
+		warn("[TeamManager] No team spawn folder - using default spawn position")
+		if team.Name == GameConfig.TEAM_1_NAME then
+			print("[TeamManager] Spawning at Y=150 (left)")
+			return CFrame.new(-50, 150, 0)
+		else
+			print("[TeamManager] Spawning at Y=150 (right)")
+			return CFrame.new(50, 150, 0)
+		end
 	end
 
 	local spawns = teamSpawnFolder:GetChildren()
 	if #spawns == 0 then
-		warn("[TeamManager] No spawn points found!")
-		return CFrame.new(0, 10, 0)
+		-- Return VERY HIGH default spawn positions based on team
+		warn("[TeamManager] No spawns in team folder - using default spawn position")
+		if team.Name == GameConfig.TEAM_1_NAME then
+			print("[TeamManager] Spawning at Y=150 (left)")
+			return CFrame.new(-50, 150, 0) -- Much higher
+		else
+			print("[TeamManager] Spawning at Y=150 (right)")
+			return CFrame.new(50, 150, 0)
+		end
 	end
 
 	-- Get random spawn
@@ -184,16 +243,30 @@ function TeamManager.GetTeamSpawnPoint(team)
 		return randomSpawn:GetPrimaryPartCFrame() + Vector3.new(0, 3, 0)
 	end
 
-	return CFrame.new(0, 10, 0)
+	print("[TeamManager] Last resort spawn at Y=150")
+	return CFrame.new(0, 150, 0)
 end
 
 -- Respawn player
 function TeamManager.RespawnPlayer(player, instant)
 	instant = instant or true
 
+	-- In practice mode, assign team if player doesn't have one
 	if not player.Team then
-		warn("[TeamManager] Player has no team:", player.Name)
-		return
+		if GameConfig.PRACTICE_MODE then
+			-- Assign to team 1 for practice mode
+			local team1 = game.Teams:FindFirstChild(GameConfig.TEAM_1_NAME)
+			if team1 then
+				player.Team = team1
+				print(string.format("[TeamManager] Assigned %s to %s (Practice Mode)", player.Name, team1.Name))
+			else
+				warn("[TeamManager] No team found for practice mode:", player.Name)
+				return
+			end
+		else
+			warn("[TeamManager] Player has no team:", player.Name)
+			return
+		end
 	end
 
 	-- Load character if needed
@@ -213,10 +286,9 @@ function TeamManager.RespawnPlayer(player, instant)
 	humanoid.Health = GameConfig.MAX_HEALTH
 	humanoid.MaxHealth = GameConfig.MAX_HEALTH
 
-	-- Equip weapon
-	TeamManager.EquipWeapon(player)
+	-- Note: Weapon equipping is now handled by the caller (Bootstrapper SpawnPlayerEvent)
 
-	print(string.format("[TeamManager] Respawned %s", player.Name))
+	print(string.format("[TeamManager] Respawned %s at position: %s", player.Name, tostring(spawnCFrame.Position)))
 end
 
 -- Handle player death
@@ -258,6 +330,39 @@ end
 function TeamManager.SetupDeathHandling(player)
 	player.CharacterAdded:Connect(function(character)
 		local humanoid = character:WaitForChild("Humanoid")
+
+		-- Re-equip weapon when character spawns (after death or manual spawn)
+		task.spawn(function()
+			character:WaitForChild("HumanoidRootPart")
+			task.wait(0.5) -- Wait for character to fully load
+
+			-- Check if player has any tools
+			local hasWeapon = false
+			for _, tool in pairs(player.Backpack:GetChildren()) do
+				if tool:IsA("Tool") then
+					hasWeapon = true
+					break
+				end
+			end
+
+			-- Also check character for tools
+			if not hasWeapon then
+				for _, tool in pairs(character:GetChildren()) do
+					if tool:IsA("Tool") then
+						hasWeapon = true
+						break
+					end
+				end
+			end
+
+			if not hasWeapon and player.Character then
+				-- Re-equip their weapon after respawn
+				print(string.format("[TeamManager] Character respawned without weapon, re-equipping for %s", player.Name))
+				TeamManager.EquipWeapon(player)
+			else
+				print(string.format("[TeamManager] Character already has weapon for %s", player.Name))
+			end
+		end)
 
 		humanoid.Died:Connect(function()
 			-- Find who killed them (if anyone)

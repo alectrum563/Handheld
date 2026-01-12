@@ -262,9 +262,11 @@ end
 
 -- Equip weapon
 function InventoryUI.EquipWeapon(weaponId)
-	-- Check if in main menu
+	-- Check if in main menu OR practice mode is enabled
+	local GameConfig = require(ReplicatedStorage.Modules.GameConfig)
 	local mainMenuUI = playerGui:FindFirstChild("MainMenuUI")
-	if not mainMenuUI or not mainMenuUI.Enabled then
+
+	if not GameConfig.PRACTICE_MODE and (not mainMenuUI or not mainMenuUI.Enabled) then
 		warn("[InventoryUI] Can only equip weapons in Main Menu!")
 
 		-- Show error message
@@ -337,7 +339,14 @@ end
 -- Initialize
 function InventoryUI.Initialize()
 	-- Create UI
-	InventoryUI.CreateUI()
+	local screenGui = InventoryUI.CreateUI()
+
+	-- Auto-refresh inventory when the UI becomes visible
+	screenGui:GetPropertyChangedSignal("Enabled"):Connect(function()
+		if screenGui.Enabled then
+			InventoryUI.RefreshInventory()
+		end
+	end)
 
 	-- Bind to Tab key to toggle inventory
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
